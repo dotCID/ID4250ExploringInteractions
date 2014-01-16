@@ -2,7 +2,14 @@
 	Written by Marien ".CID" Wolthuis for ID4250 - started at 15/1/2014
 	
 	This is a godclass containing both the code for swipe functionality and basic LED lighting.
-	It lights the LEDs in sequence, reverts due to user activity, and reads out the pads at TimeToNext/25 intervals
+	Features:
+		- Lights LEDs in the correct paired sequence
+		- Reads out the sensor nodes (at TimeToNext/25 intervals)
+		- Tracks user progress through the sequence
+		- Switches LEDs back to an earlier state if they run ahead of the user
+		- Blinks LED 8 and 19 when unlocked
+	
+	For electronics schematic refer to prototypeElectronicsDesign.png
 	
 	Numbering of sensor nodes: (front view)
 		___________________
