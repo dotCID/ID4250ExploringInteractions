@@ -81,7 +81,15 @@ int LEDpairs[20][5] = {	// contains the GP/IODIR and timing values, per LED pair
 	{ 0x82 , 0x24 ,	0x00 , 0x00, 300 }  // step 5
 };
 
-int touchLEDcorrespondence[5] = {	// touch steps, with in the column corresponding LED pairs AT the nodes (these correspond with loop()->i as well)
+int nodePairs[5][2] = {	// contains the combinations of pads touched
+	{ 1, 0 },
+	{ 3, 2 },
+	{ 5, 4 },
+	{ 5, 7 },
+	{ 4, 6 }
+};
+
+int touchLEDcorrespondence[5] = {	// touch steps, with in the column corresponding LED pairs AT the nodes (these correspond with loop()->i-1)
 	0,
 	1,
 	3,
@@ -94,10 +102,12 @@ const bool DEBUG = true;						// unlocks partial debug prints (state completion)
 const bool haltUntilFirstTouch = true;			// halts lighting of LED sequence until first pads are touched
 
 bool started = false;
-long starttime = 0;
 bool fridgeUnlocked = false;
 bool touchedNodes[8] = {false}; 				// these are only flipped to true when nodes are touched
 bool stepsCompleted[5] = {false};
+bool revertTo0 = false;							// needed to set LEd pair loop to 0 correctly
+int previousCycle = -1;							// tracks previously touched pair
+int cycleCount = 0;								// tracks loop count
 
 int unlockedLed = 13;							// both onboard LED and external
 
@@ -135,31 +145,62 @@ void setup() {
 }
 
 void loop(){
-	if(!started){ print("Program active\n\n",0); started=true;};
+	if(!started){ 
+		print("Program active\n\n",0); 
+		started=true;
+	};
+	
 	for(int i=0;i<11;i++){ // count over LED pairs
-		int prevCompleted = checkCompletion(); 
-		if(prevCompleted == 0 && haltUntilFirstTouch) { i=0;} // stalls the sequence on position 1 until that is touched
+		if(i==0) { 
+			if(cycleCount < 4){
+				cycleCount++;
+			} else reInit();	// reinit after 3 incomplete cycles
+		};
+		if(checkCompletion() == -1 && haltUntilFirstTouch) { i=0;} // stalls the sequence on position 1 until that is touched
 		
 		print("Pair ",0); print(i,0); print(" is on.\n",0);
 		killLEDs();
 		lightLEDpair(i);
 				  
-		for(int j=0;j<25;j++){ // split delays in about 10-20ms to have steady timing
-			int completed = checkCompletion();
-			if((prevCompleted != completed) && (touchLEDcorrespondence[completed-1] < i)) { // if the LEDs are ahead of the user, restart at the user's last position
-				i = touchLEDcorrespondence[completed-1];
+		for(int j=0;j<25;j++){ // split delays in about 10-20ms to have steady timing			
+			if(fridgeUnlocked) unlock();
+			
+			checkNodes();
+			int completedStep = checkSequence();
+			
+			if((completedStep >= 0) &&
+			   (completedStep != previousCycle) &&
+			   (touchLEDcorrespondence[completedStep] < i+1)) { // if the LEDs are ahead of the user, restart at the user's current position
+			   
+			    previousCycle = completedStep;
+				i = touchLEDcorrespondence[completedStep];		// it seems if i=0 here the next loop is executed with i=1
+				if(i == 0) revertTo0 = true;
 				print("Reverted to pair ",0);print(i,0);print("\n",0);
 				break;
 			}
-			
-			if(fridgeUnlocked) unlock();
-			checkNodes();
-			checkSequence();
+			previousCycle = completedStep;
 			delay((LEDpairs[i][4]/25));
 			
-			if(FDEBUG) delay(100);
 		}
-		if(fridgeUnlocked && i==10){ print("Successfully unlocked!\n\n",0); delay(15000); reInit(); break;};
+		if(revertTo0){
+			revertTo0 = false;
+			break;	// break main for loop to get i=0
+		}
+		if(fridgeUnlocked){ 
+			print("Successfully unlocked!\n\n",0);
+			lightLEDpair(10);
+			
+			for(int j=0;j<3;j++){
+				delay(2500);
+				killLEDs();
+				delay(1500);
+				lightLEDpair(10);
+			};
+			
+			delay(3000); 
+			reInit(); 
+			break;
+		};
 	}
 }
 
@@ -171,7 +212,7 @@ int checkCompletion(){
 	}
 	if(totalStepsCompleted == 5){ fridgeUnlocked = true;}
 	
-	return totalStepsCompleted;
+	return totalStepsCompleted-1;	// -1 otherwise it does not line up with the nodePairs array
 }
 
 void unlock(){
@@ -193,18 +234,23 @@ void checkNodes(){
 	print("\n",1);
 }
 
-void checkSequence(){
-	// only checks nodes if step is not yet completed
-	if(!stepsCompleted[0]){		 if(touchedNodes[1] && touchedNodes[0]) { stepsCompleted[0] = true; print("-----------------Step 1 completed--------------\n",0); starttime = millis();};}
-	else if(!stepsCompleted[1]){ if(touchedNodes[3] && touchedNodes[2]) { stepsCompleted[1] = true; print(millis()-starttime,0); print("-----------------Step 2 completed--------------\n",0); };}
-	else if(!stepsCompleted[2]){ if(touchedNodes[5] && touchedNodes[4]) { stepsCompleted[2] = true; print(millis()-starttime,0); print("-----------------Step 3 completed--------------\n",0); };}
-	else if(!stepsCompleted[3]){ if(touchedNodes[5] && touchedNodes[7]) { stepsCompleted[3] = true; print(millis()-starttime,0); print("-----------------Step 4 completed--------------\n",0); };}
-	else if(!stepsCompleted[4]){ if(touchedNodes[4] && touchedNodes[6]) { stepsCompleted[4] = true; print(millis()-starttime,0); print("-----------------Step 5 completed--------------\n",0); };};
+int checkSequence(){
+	int stepComplete = -1;
+	
+	for(int i=0;i<5;i++){
+		if((stepsCompleted[i-1] || i==0) &&	// only check if either i==0 or the previous step was completed
+		   (touchedNodes[nodePairs[i][0]] && touchedNodes[nodePairs[i][1]])) {
+			stepsCompleted[i] = true;
+			stepComplete = i;						// assumes only one step can be completed at a time (since multiple would be physically impossible within a clock cycle)
+		}
+	}
 	
 	// reset touchedNodes after this checkcycle
 	for(int i=0;i<8;i++){
 		if(touchedNodes[i]){touchedNodes[i]=false;}; 
     };
+	
+	return stepComplete;
 }
 
 void lightLEDpair(int i){
@@ -243,6 +289,7 @@ void reInit(){
 		stepsCompleted[i] = false;
 	}
 	digitalWrite(unlockedLed, LOW);
+	cycleCount = 0;
 	print(" ..done\n",0);
 }
 
