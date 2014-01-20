@@ -224,7 +224,7 @@ void checkNodes(){
 	long results[8];
 	for(int i=0;i<8;i++){
 		results[i] = nodes[i].capacitiveSensor(NODE_SAMPLES);
-		if(results[i] > node_threshold){ touchedNodes[i] = true;};
+		if(results[i] > node_threshold){ touchedNodes[i] = true; cycleCount=0;}; //reset cycle counter so user has enough time to figure things out
 		print(results[i],1);
 		print("\t",1);
 	};
