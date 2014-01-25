@@ -68,7 +68,7 @@
 
 // values begin
 int LEDpairs[20][5] = {	// contains the GP/IODIR and timing values, per LED pair: { GP0, IODIR0, GP1, IODIR1, TimeToNext }
-	{ 0x20 , 0x40 , 0x01 , 0x0A, 375 },	// step 1->2: 750ms
+	{ 0x20 , 0x40 , 0x01 , 0x0A, 375 },	// step 1->2: 750ms		// Note: these steps do NOT correspond with the ones in the report, these are merely nodePair -> nodePair steps
 	{ 0x80 , 0x40 , 0x04 , 0x0A, 375 },
 	{ 0x20 , 0x80 , 0x01 , 0x0C, 350 }, // step 2->3: 700ms
 	{ 0x40 , 0x80 , 0x02 , 0x0C, 350 },
